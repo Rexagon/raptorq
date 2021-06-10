@@ -306,16 +306,18 @@ impl SourceBlockEncoder {
 
     // See section 5.3.4
     pub fn repair_packets(&self, start_repair_symbol_id: u32, packets: u32) -> Vec<EncodingPacket> {
-        let start_encoding_symbol_id = start_repair_symbol_id
-            + extended_source_block_symbols(self.source_symbols.len() as u32);
+        let source_symbols = self.source_symbols.len() as u32;
+        let start_encoding_symbol_id =
+            start_repair_symbol_id - source_symbols + extended_source_block_symbols(source_symbols);
         let mut result = vec![];
-        let lt_symbols = num_lt_symbols(self.source_symbols.len() as u32);
-        let sys_index = systematic_index(self.source_symbols.len() as u32);
-        let p1 = calculate_p1(self.source_symbols.len() as u32);
+        let lt_symbols = num_lt_symbols(source_symbols);
+        let pi_symbols = num_pi_symbols(source_symbols);
+        let sys_index = systematic_index(source_symbols);
+        let p1 = calculate_p1(source_symbols, pi_symbols);
         for i in 0..packets {
             let tuple = intermediate_tuple(start_encoding_symbol_id + i, lt_symbols, sys_index, p1);
             result.push(EncodingPacket::new(
-                PayloadId::new(self.source_block_id, start_encoding_symbol_id + i),
+                PayloadId::new(self.source_block_id, start_repair_symbol_id + i),
                 enc(
                     self.source_symbols.len() as u32,
                     &self.intermediate_symbols,
@@ -399,7 +401,7 @@ fn enc(
 ) -> Symbol {
     let w = num_lt_symbols(source_block_symbols);
     let p = num_pi_symbols(source_block_symbols);
-    let p1 = calculate_p1(source_block_symbols);
+    let p1 = calculate_p1(source_block_symbols, p);
     let (d, a, mut b, d1, a1, mut b1) = source_tuple;
 
     assert!(1 <= a && a < w);
@@ -485,8 +487,9 @@ mod tests {
         let intermediate_symbols = intermediate_symbols.unwrap();
 
         let lt_symbols = num_lt_symbols(NUM_SYMBOLS);
+        let pi_symbols = num_pi_symbols(NUM_SYMBOLS);
         let sys_index = systematic_index(NUM_SYMBOLS);
-        let p1 = calculate_p1(NUM_SYMBOLS);
+        let p1 = calculate_p1(NUM_SYMBOLS, pi_symbols);
         // See section 5.3.3.4.1, item 1.
         for i in 0..source_symbols.len() {
             let tuple = intermediate_tuple(i as u32, lt_symbols, sys_index, p1);

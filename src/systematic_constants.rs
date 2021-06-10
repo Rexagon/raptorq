@@ -1037,10 +1037,10 @@ pub fn num_pi_symbols(source_block_symbols: u32) -> u32 {
 }
 
 // Calculates P1, smallest prime greater than P. See 5.3.3.3
-pub fn calculate_p1(source_block_symbols: u32) -> u32 {
+pub fn calculate_p1(source_block_symbols: u32, pi_symbols: u32) -> u32 {
     assert!(source_block_symbols <= MAX_SOURCE_SYMBOLS_PER_BLOCK);
     for &(block_size, p1) in P1_TABLE.iter() {
-        if block_size >= source_block_symbols {
+        if (block_size >= source_block_symbols) && (p1 > pi_symbols) {
             return p1;
         }
     }
@@ -1073,8 +1073,9 @@ mod tests {
                     p1 += 2;
                 }
             }
+            let pi_symbols = num_pi_symbols(p1);
 
-            assert_eq!(p1, calculate_p1(i));
+            assert_eq!(p1, calculate_p1(i, pi_symbols));
         }
     }
 }

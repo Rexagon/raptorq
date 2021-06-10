@@ -2,6 +2,7 @@ use crate::base::intermediate_tuple;
 use crate::base::partition;
 use crate::base::EncodingPacket;
 use crate::base::ObjectTransmissionInformation;
+use crate::base::PayloadId;
 use crate::constraint_matrix::enc_indices;
 use crate::constraint_matrix::generate_constraint_matrix;
 use crate::encoder::SPARSE_MATRIX_THRESHOLD;
@@ -125,6 +126,7 @@ pub struct SourceBlockDecoder {
     received_source_symbols: u32,
     received_esi: HashSet<u32>,
     decoded: bool,
+    custom: bool,
     sparse_threshold: u32,
 }
 
@@ -160,6 +162,7 @@ impl SourceBlockDecoder {
             received_source_symbols: 0,
             received_esi,
             decoded: false,
+            custom: false,
             sparse_threshold: SPARSE_MATRIX_THRESHOLD,
         }
     }
@@ -211,7 +214,7 @@ impl SourceBlockDecoder {
         let lt_symbols = num_lt_symbols(self.source_block_symbols);
         let pi_symbols = num_pi_symbols(self.source_block_symbols);
         let sys_index = systematic_index(self.source_block_symbols);
-        let p1 = calculate_p1(self.source_block_symbols);
+        let p1 = calculate_p1(self.source_block_symbols, pi_symbols);
         for i in 0..self.source_block_symbols as usize {
             if let Some(ref symbol) = self.source_symbols[i] {
                 self.unpack_sub_blocks(&mut result, symbol, i);
@@ -236,6 +239,8 @@ impl SourceBlockDecoder {
         &mut self,
         packets: T,
     ) -> Option<Vec<u8>> {
+        let num_extended_symbols = extended_source_block_symbols(self.source_block_symbols);
+
         for packet in packets {
             assert_eq!(
                 self.source_block_id,
@@ -243,24 +248,27 @@ impl SourceBlockDecoder {
             );
 
             let (payload_id, payload) = packet.split();
-            let num_extended_symbols = extended_source_block_symbols(self.source_block_symbols);
-            if self.received_esi.insert(payload_id.encoding_symbol_id()) {
-                if payload_id.encoding_symbol_id() >= num_extended_symbols {
+            let symbol_id = if payload_id.encoding_symbol_id() >= self.source_block_symbols {
+                payload_id.encoding_symbol_id() + num_extended_symbols - self.source_block_symbols
+            } else {
+                payload_id.encoding_symbol_id()
+            };
+
+            if self.received_esi.insert(symbol_id) {
+                if symbol_id >= num_extended_symbols {
                     // Repair symbol
                     self.repair_packets
-                        .push(EncodingPacket::new(payload_id, payload));
+                        .push(EncodingPacket::new(PayloadId::new(0, symbol_id), payload));
                 } else {
                     // Check that this is not an extended symbol (which aren't explicitly sent)
-                    assert!(payload_id.encoding_symbol_id() < self.source_block_symbols);
+                    assert!(symbol_id < self.source_block_symbols);
                     // Source symbol
-                    self.source_symbols[payload_id.encoding_symbol_id() as usize] =
-                        Some(Symbol::new(payload));
+                    self.source_symbols[symbol_id as usize] = Some(Symbol::new(payload));
                     self.received_source_symbols += 1;
                 }
             }
         }
 
-        let num_extended_symbols = extended_source_block_symbols(self.source_block_symbols);
         if self.received_source_symbols == self.source_block_symbols {
             let mut result =
                 vec![0; self.symbol_size as usize * self.source_block_symbols as usize];
@@ -297,19 +305,19 @@ impl SourceBlockDecoder {
                 d.push(Symbol::new(repair_packet.data.clone()));
             }
 
-            if extended_source_block_symbols(self.source_block_symbols) >= self.sparse_threshold {
+            return if num_extended_symbols >= self.sparse_threshold {
                 let (constraint_matrix, hdpc) = generate_constraint_matrix::<SparseBinaryMatrix>(
                     self.source_block_symbols,
                     &encoded_indices,
                 );
-                return self.try_pi_decode(constraint_matrix, hdpc, d);
+                self.try_pi_decode(constraint_matrix, hdpc, d)
             } else {
                 let (constraint_matrix, hdpc) = generate_constraint_matrix::<DenseBinaryMatrix>(
                     self.source_block_symbols,
                     &encoded_indices,
                 );
-                return self.try_pi_decode(constraint_matrix, hdpc, d);
-            }
+                self.try_pi_decode(constraint_matrix, hdpc, d)
+            };
         }
         None
     }

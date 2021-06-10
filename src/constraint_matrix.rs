@@ -155,7 +155,7 @@ pub fn generate_constraint_matrix<T: BinaryMatrix>(
     let lt_symbols = num_lt_symbols(Kprime as u32);
     let pi_symbols = num_pi_symbols(Kprime as u32);
     let sys_index = systematic_index(Kprime as u32);
-    let p1 = calculate_p1(Kprime as u32);
+    let p1 = calculate_p1(Kprime as u32, pi_symbols);
     for (row, &i) in encoded_symbol_indices.iter().enumerate() {
         // row != i, because i is the ESI
         let tuple = intermediate_tuple(i, lt_symbols, sys_index, p1);
