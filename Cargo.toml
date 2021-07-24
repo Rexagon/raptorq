@@ -43,7 +43,7 @@ debug = true
 lto = false
 
 [features]
-benchmarking = []
+benchmarking = ["criterion/html_reports"]
 use_neon = []
 python = ["pyo3"]
 serde_support = ["serde"]

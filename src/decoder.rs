@@ -70,20 +70,23 @@ impl Decoder {
             self.blocks[block_number] =
                 self.block_decoders[block_number].decode(iter::once(packet));
         }
+
+        let mut total_size = 0;
         for block in self.blocks.iter() {
-            if block.is_none() {
-                return None;
+            match block {
+                Some(block) => total_size += block.len(),
+                None => return None,
             }
         }
 
-        let mut result = vec![];
-        for block in self.blocks.iter() {
-            if let Some(block) = block {
-                result.extend(block);
-            }
+        let transfer_length = std::cmp::min(self.config.transfer_length() as usize, total_size);
+
+        let mut result = Vec::with_capacity(transfer_length);
+        for block in self.blocks.iter().flatten() {
+            let range_end = std::cmp::min(block.len(), transfer_length - result.len());
+            result.extend_from_slice(&block[..range_end]);
         }
 
-        result.truncate(self.config.transfer_length() as usize);
         Some(result)
     }
 
@@ -103,10 +106,8 @@ impl Decoder {
         }
 
         let mut result = vec![];
-        for block in self.blocks.iter() {
-            if let Some(block) = block {
-                result.extend(block);
-            }
+        for block in self.blocks.iter().flatten() {
+            result.extend(block);
         }
         result.truncate(self.config.transfer_length() as usize);
         Some(result)
