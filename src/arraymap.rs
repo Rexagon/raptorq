@@ -224,8 +224,7 @@ impl U32VecMap {
 
     fn grow_if_necessary(&mut self, index: usize) {
         if index >= self.elements.len() {
-            self.elements
-                .extend(vec![0; index - self.elements.len() + 1]);
+            self.elements.resize(index + 1, 0);
         }
     }
 

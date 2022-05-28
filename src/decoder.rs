@@ -107,7 +107,7 @@ impl Decoder {
 
         let mut result = vec![];
         for block in self.blocks.iter().flatten() {
-            result.extend(block);
+            result.extend_from_slice(block);
         }
         result.truncate(self.config.transfer_length() as usize);
         Some(result)
@@ -173,7 +173,7 @@ impl SourceBlockDecoder {
         self.sparse_threshold = value;
     }
 
-    fn unpack_sub_blocks(&self, result: &mut Vec<u8>, symbol: &Symbol, symbol_index: usize) {
+    fn unpack_sub_blocks(&self, result: &mut [u8], symbol: &Symbol, symbol_index: usize) {
         let (tl, ts, nl, ns) = partition(
             (self.symbol_size / self.symbol_alignment as u16) as u32,
             self.num_sub_blocks,
@@ -522,6 +522,31 @@ mod codec_tests {
     #[test]
     fn repair_sparse_pre_planned() {
         repair(0, 50, false, true);
+    }
+
+    #[test]
+    fn issue_120() {
+        let symbol_size = 1280;
+        let overhead = 0.5;
+        let symbol_count = 10;
+        let elements = symbol_count * symbol_size as usize;
+        let mut data: Vec<u8> = vec![0; elements];
+        for i in 0..elements {
+            data[i] = rand::thread_rng().gen();
+        }
+
+        let total_bytes: usize = 1024 * 1024;
+        let iterations = total_bytes / elements;
+        let config = ObjectTransmissionInformation::new(0, symbol_size, 0, 1, 1);
+        let encoder = SourceBlockEncoder::new2(1, &config, &data);
+        let elements_and_overhead = (symbol_count as f64 * (1.0 + overhead)) as u32;
+        let mut packets =
+            encoder.repair_packets(0, (iterations as u32 * elements_and_overhead) as u32);
+        for _ in 0..iterations {
+            let mut decoder = SourceBlockDecoder::new2(1, &config, elements as u64);
+            let start = packets.len() - elements_and_overhead as usize;
+            decoder.decode(packets.drain(start..));
+        }
     }
 
     fn repair(sparse_threshold: u32, max_symbols: usize, progress: bool, pre_plan: bool) {

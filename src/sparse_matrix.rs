@@ -328,7 +328,8 @@ impl BinaryMatrix for SparseBinaryMatrix {
         if last_word >= self.dense_elements.len() {
             // Append a new set of words
             let mut src = self.dense_elements.len();
-            self.dense_elements.extend(vec![0; self.height]);
+            self.dense_elements
+                .resize(self.dense_elements.len() + self.height, 0);
             let mut dest = self.dense_elements.len();
             // Re-space the elements, so that each row has an empty word
             while src > 0 {

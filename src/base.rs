@@ -76,7 +76,7 @@ impl EncodingPacket {
     pub fn serialize(&self) -> Vec<u8> {
         let mut serialized = Vec::with_capacity(4 + self.data.len());
         serialized.extend_from_slice(&self.payload_id.serialize());
-        serialized.extend(self.data.iter());
+        serialized.extend_from_slice(&self.data);
         return serialized;
     }
 
