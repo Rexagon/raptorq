@@ -5,10 +5,10 @@ use criterion::Criterion;
 use criterion::Throughput;
 
 use rand::Rng;
-use raptorq::SourceBlockDecoder;
-use raptorq::SourceBlockEncoder;
-use raptorq::Symbol;
-use raptorq::{ObjectTransmissionInformation, Octet};
+use everscale_raptorq::SourceBlockDecoder;
+use everscale_raptorq::SourceBlockEncoder;
+use everscale_raptorq::Symbol;
+use everscale_raptorq::{ObjectTransmissionInformation, Octet};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let octet1 = Octet::new(rand::thread_rng().gen_range(1..255));

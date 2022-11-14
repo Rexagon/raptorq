@@ -392,11 +392,12 @@ impl FirstPhaseRowSelectionStats {
             }
         }
 
-        if r == None {
-            return (None, None);
-        }
+        let r = match r {
+            Some(r) => r,
+            None => return (None, None),
+        };
 
-        if r.unwrap() == 2 {
+        if r == 2 {
             // Paragraph starting "If r = 2 and there is no row with exactly 2 ones in V" can
             // be ignored due to Errata 8.
 
@@ -404,10 +405,10 @@ impl FirstPhaseRowSelectionStats {
             #[cfg(debug_assertions)]
             self.first_phase_graph_substep_verify(start_row, end_row);
             let row = self.first_phase_graph_substep(start_row, end_row, matrix);
-            return (Some(row), r);
+            return (Some(row), Some(r));
         } else {
-            let row = self.first_phase_original_degree_substep(start_row, end_row, r.unwrap());
-            return (Some(row), r);
+            let row = self.first_phase_original_degree_substep(start_row, end_row, r);
+            return (Some(row), Some(r));
         }
     }
 }
@@ -680,10 +681,7 @@ impl<T: BinaryMatrix> IntermediateSymbolDecoder<T> {
                 &self.A,
             );
 
-            if r == None {
-                return None;
-            }
-            let r = r.unwrap();
+            let r = r?;
             let chosen_row = chosen_row.unwrap();
             assert!(chosen_row >= self.i);
 

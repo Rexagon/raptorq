@@ -61,45 +61,46 @@ fn generate_hdpc_rows(Kprime: usize, S: usize, H: usize) -> DenseOctetMatrix {
     // Compute G_HDPC using recursive formulation, since this is much faster than a
     // naive matrix multiplication approach
 
-    let mut result: Vec<Vec<u8>> = vec![vec![0; Kprime + S]; H];
+    let w = Kprime + S;
+    let mut result: Vec<u8> = vec![0; w * H];
     // Initialize the last column to alpha^i, which comes from multiplying the last column of MT
     // with the lower right 1 in GAMMA
     #[allow(clippy::needless_range_loop)]
     for i in 0..H {
-        result[i][Kprime + S - 1] = Octet::alpha(i).byte();
+        result[i * w + w - 1] = Octet::alpha(i).byte();
     }
 
     // Now compute the rest of G_HDPC.
     // Note that for each row in GAMMA, i'th col = alpha * (i + 1)'th col
     // Therefore we can compute this right to left, by multiplying by alpha each time, and adding
     // the Rand() entries which will be associatively handled
-    for j in (0..=(Kprime + S - 2)).rev() {
+    for j in (0..=(w - 2)).rev() {
         #[allow(clippy::needless_range_loop)]
         for i in 0..H {
-            result[i][j] = (Octet::alpha(1) * Octet::new(result[i][j + 1])).byte();
+            result[i * w + j] = (Octet::alpha(1) * Octet::new(result[i * w + j + 1])).byte();
         }
         let rand6 = rand((j + 1) as u32, 6u32, H as u32) as usize;
         let rand7 = rand((j + 1) as u32, 7u32, (H - 1) as u32) as usize;
         let i1 = rand6;
         let i2 = (rand6 + rand7 + 1) % H;
-        result[i1][j] ^= Octet::one().byte();
-        result[i2][j] ^= Octet::one().byte();
+        result[i1 * w + j] ^= Octet::one().byte();
+        result[i2 * w + j] ^= Octet::one().byte();
     }
 
     // Copy G_HDPC into matrix
     #[allow(clippy::needless_range_loop)]
     for i in 0..H {
         #[allow(clippy::needless_range_loop)]
-        for j in 0..(Kprime + S) {
-            if result[i][j] != 0 {
-                matrix.set(i, j, Octet::new(result[i][j]));
+        for j in 0..w {
+            if result[i * w + j] != 0 {
+                matrix.set(i, j, Octet::new(result[i * w + j]));
             }
         }
     }
 
     // I_H
     for i in 0..H {
-        matrix.set(i, i + (Kprime + S) as usize, Octet::one());
+        matrix.set(i, i + w, Octet::one());
     }
 
     matrix

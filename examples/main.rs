@@ -1,6 +1,6 @@
 use rand::seq::SliceRandom;
 use rand::Rng;
-use raptorq::{Decoder, Encoder, EncodingPacket};
+use everscale_raptorq::{Decoder, Encoder, EncodingPacket};
 
 fn main() {
     // Generate some random data to send
