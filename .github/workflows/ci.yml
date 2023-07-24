@@ -21,7 +21,7 @@ jobs:
       - name: Install packages
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install python3
+          brew install python3 openssl
 
       - uses: actions-rs/toolchain@v1
         with:
@@ -29,10 +29,13 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install cargo-deny
-        run: cargo install --force --version 0.9.1 cargo-deny --locked
+        run: cargo install --force --version 0.12.2 cargo-deny --locked
 
       - name: Run tests
         run: make test
+
+      - name: Run tests (no-std)
+        run: cargo test --no-default-features
 
       - name: Run CPython wrapper tests
         run: |

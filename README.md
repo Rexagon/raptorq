@@ -6,6 +6,10 @@
 
 > **NOTE: This is a fork of [cberner's raptorq](https://github.com/cberner/raptorq) with some compatibility changes**
 
+### Status: NO LONGER MAINTAINED; HAS KNOWN BUGS.
+
+### Overview
+
 Rust implementation of RaptorQ (RFC6330)
 
 Recovery properties:

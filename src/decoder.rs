@@ -1,3 +1,12 @@
+#[cfg(feature = "std")]
+use std::{collections::HashSet as Set, iter, vec::Vec};
+
+#[cfg(not(feature = "std"))]
+use core::iter;
+
+#[cfg(not(feature = "std"))]
+use alloc::{collections::BTreeSet as Set, vec::Vec};
+
 use crate::base::intermediate_tuple;
 use crate::base::partition;
 use crate::base::EncodingPacket;
@@ -16,9 +25,9 @@ use crate::systematic_constants::num_ldpc_symbols;
 use crate::systematic_constants::{
     calculate_p1, extended_source_block_symbols, num_lt_symbols, num_pi_symbols, systematic_index,
 };
+use crate::util::int_div_ceil;
 #[cfg(feature = "serde_support")]
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, iter};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde_support", derive(Serialize, Deserialize))]
@@ -30,7 +39,8 @@ pub struct Decoder {
 
 impl Decoder {
     pub fn new(config: ObjectTransmissionInformation) -> Decoder {
-        let kt = (config.transfer_length() as f64 / config.symbol_size() as f64).ceil() as u32;
+        let kt = int_div_ceil(config.transfer_length(), config.symbol_size() as u64);
+
         let (kl, ks, zl, zs) = partition(kt, config.source_blocks());
 
         let mut decoders = vec![];
@@ -57,7 +67,10 @@ impl Decoder {
         }
     }
 
-    #[cfg(any(test, feature = "benchmarking"))]
+    #[cfg(all(
+        any(test, feature = "benchmarking"),
+        not(feature = "python")
+    ))]
     pub fn set_sparse_threshold(&mut self, value: u32) {
         for block_decoder in self.block_decoders.iter_mut() {
             block_decoder.set_sparse_threshold(value);
@@ -90,6 +103,7 @@ impl Decoder {
         Some(result)
     }
 
+    #[cfg(not(feature = "python"))]
     pub fn add_new_packet(&mut self, packet: EncodingPacket) {
         let block_number = packet.payload_id.source_block_number() as usize;
         if self.blocks[block_number].is_none() {
@@ -98,6 +112,7 @@ impl Decoder {
         }
     }
 
+    #[cfg(not(feature = "python"))]
     pub fn get_result(&self) -> Option<Vec<u8>> {
         for block in self.blocks.iter() {
             if block.is_none() {
@@ -125,7 +140,7 @@ pub struct SourceBlockDecoder {
     source_symbols: Vec<Option<Symbol>>,
     repair_packets: Vec<EncodingPacket>,
     received_source_symbols: u32,
-    received_esi: HashSet<u32>,
+    received_esi: Set<u32>,
     decoded: bool,
     custom: bool,
     sparse_threshold: u32,
@@ -136,6 +151,7 @@ impl SourceBlockDecoder {
         since = "1.3.0",
         note = "Use the new2() function instead. In version 2.0, that function will replace this one"
     )]
+    #[cfg(feature = "std")]
     pub fn new(source_block_id: u8, symbol_size: u16, block_length: u64) -> SourceBlockDecoder {
         let config = ObjectTransmissionInformation::new(0, symbol_size, 0, 1, 1);
         SourceBlockDecoder::new2(source_block_id, &config, block_length)
@@ -147,8 +163,9 @@ impl SourceBlockDecoder {
         config: &ObjectTransmissionInformation,
         block_length: u64,
     ) -> SourceBlockDecoder {
-        let source_symbols = (block_length as f64 / config.symbol_size() as f64).ceil() as u32;
-        let mut received_esi = HashSet::new();
+        let source_symbols = int_div_ceil(block_length, config.symbol_size() as u64);
+
+        let mut received_esi = Set::new();
         for i in source_symbols..extended_source_block_symbols(source_symbols) {
             received_esi.insert(i);
         }
@@ -181,7 +198,7 @@ impl SourceBlockDecoder {
 
         let mut symbol_offset = 0;
         let mut sub_block_offset = 0;
-        for sub_block in 0..(nl + ns) as u32 {
+        for sub_block in 0..(nl + ns) {
             let bytes = if sub_block < nl {
                 tl as usize * self.symbol_alignment as usize
             } else {
@@ -342,30 +359,41 @@ impl SourceBlockDecoder {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod codec_tests {
+    #[cfg(not(feature = "python"))]
+    use crate::Decoder;
     use crate::SourceBlockEncoder;
-    use crate::{Decoder, SourceBlockEncodingPlan};
+    use crate::SourceBlockEncodingPlan;
+    #[cfg(not(feature = "python"))]
     use crate::{Encoder, EncoderBuilder};
     use crate::{ObjectTransmissionInformation, SourceBlockDecoder};
+    #[cfg(not(feature = "python"))]
     use rand::seq::SliceRandom;
     use rand::Rng;
-    use std::sync::Arc;
     use std::{
         iter,
-        sync::atomic::{AtomicU32, Ordering},
+        sync::{
+            atomic::{AtomicU32, Ordering},
+            Arc,
+        },
+        vec::Vec,
     };
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn random_erasure_dense() {
         random_erasure(99_999);
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn random_erasure_sparse() {
         random_erasure(0);
     }
 
+    #[cfg(not(feature = "python"))]
     fn random_erasure(sparse_threshold: u32) {
         let elements: usize = rand::thread_rng().gen_range(1..1_000_000);
         let mut data: Vec<u8> = vec![0; elements];
@@ -390,7 +418,7 @@ mod codec_tests {
         let mut result = None;
         while !packets.is_empty() {
             result = decoder.decode(packets.pop().unwrap());
-            if result != None {
+            if result.is_some() {
                 break;
             }
         }
@@ -398,6 +426,7 @@ mod codec_tests {
         assert_eq!(result.unwrap(), data);
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn sub_block_erasure() {
         let elements: usize = 10_000;
@@ -433,7 +462,7 @@ mod codec_tests {
         let mut result = None;
         while !packets.is_empty() {
             result = decoder.decode(packets.pop().unwrap());
-            if result != None {
+            if result.is_some() {
                 break;
             }
         }
@@ -473,7 +502,7 @@ mod codec_tests {
             }
 
             if progress && symbol_count % 100 == 0 {
-                println!("Completed {} symbols", symbol_count)
+                println!("Completed {symbol_count} symbols")
             }
 
             let config = ObjectTransmissionInformation::new(0, symbol_size as u16, 0, 1, 1);
@@ -540,8 +569,7 @@ mod codec_tests {
         let config = ObjectTransmissionInformation::new(0, symbol_size, 0, 1, 1);
         let encoder = SourceBlockEncoder::new2(1, &config, &data);
         let elements_and_overhead = (symbol_count as f64 * (1.0 + overhead)) as u32;
-        let mut packets =
-            encoder.repair_packets(0, (iterations as u32 * elements_and_overhead) as u32);
+        let mut packets = encoder.repair_packets(0, iterations as u32 * elements_and_overhead);
         for _ in 0..iterations {
             let mut decoder = SourceBlockDecoder::new2(1, &config, elements as u64);
             let start = packets.len() - elements_and_overhead as usize;
@@ -564,7 +592,7 @@ mod codec_tests {
                 }
 
                 if progress && symbol_count % 100 == 0 {
-                    println!("[repair] Completed {} symbols", symbol_count)
+                    println!("[repair] Completed {symbol_count} symbols")
                 }
             })
         }

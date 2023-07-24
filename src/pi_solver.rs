@@ -1,3 +1,12 @@
+#[cfg(feature = "std")]
+use std::{mem, mem::size_of, u16, vec::Vec};
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+#[cfg(not(feature = "std"))]
+use core::{mem, mem::size_of, u16};
+
 use crate::arraymap::UndirectedGraph;
 use crate::arraymap::{U16ArrayMap, U32VecMap};
 use crate::graph::ConnectedComponentGraph;
@@ -12,7 +21,6 @@ use crate::systematic_constants::num_intermediate_symbols;
 use crate::systematic_constants::num_ldpc_symbols;
 use crate::systematic_constants::num_pi_symbols;
 use crate::util::get_both_indices;
-use std::mem::size_of;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 enum RowOp {
@@ -320,7 +328,7 @@ impl FirstPhaseRowSelectionStats {
             .get_node_in_largest_connected_component(self.start_col, self.end_col);
 
         // Find a row with two ones in the given column
-        for row in matrix.get_ones_in_column(node as usize, start_row, end_row) {
+        for row in matrix.get_ones_in_column(node, start_row, end_row) {
             let row = row as usize;
             if self.ones_per_row.get(row) == 2 {
                 return row;
@@ -339,7 +347,7 @@ impl FirstPhaseRowSelectionStats {
         // There's no need for special handling of HDPC rows, since Errata 2 guarantees we won't
         // select any, and they're excluded in the first_phase solver
         let mut chosen = None;
-        let mut chosen_original_degree = std::u16::MAX;
+        let mut chosen_original_degree = u16::MAX;
         // Fast path for r=1, since this is super common
         if r == 1 {
             assert_ne!(0, self.rows_with_single_one.len());
@@ -1309,7 +1317,7 @@ impl<T: BinaryMatrix> IntermediateSymbolDecoder<T> {
             reorder.push(*i);
         }
 
-        let mut operation_vector = std::mem::take(&mut self.deferred_D_ops);
+        let mut operation_vector = mem::take(&mut self.deferred_D_ops);
         operation_vector.push(SymbolOps::Reorder { order: reorder });
         return (Some(result), Some(operation_vector));
     }
@@ -1326,6 +1334,7 @@ pub fn fused_inverse_mul_symbols<T: BinaryMatrix>(
     IntermediateSymbolDecoder::new(matrix, hdpc_rows, symbols, num_source_symbols).execute()
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use super::IntermediateSymbolDecoder;
@@ -1337,6 +1346,7 @@ mod tests {
         extended_source_block_symbols, num_ldpc_symbols, num_lt_symbols,
         MAX_SOURCE_SYMBOLS_PER_BLOCK,
     };
+    use std::vec::Vec;
 
     #[test]
     fn operations_per_symbol() {

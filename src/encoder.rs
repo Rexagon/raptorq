@@ -1,3 +1,9 @@
+#[cfg(feature = "std")]
+use std::vec::Vec;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 use crate::base::intermediate_tuple;
 use crate::base::partition;
 use crate::base::EncodingPacket;
@@ -15,6 +21,7 @@ use crate::systematic_constants::num_ldpc_symbols;
 use crate::systematic_constants::num_lt_symbols;
 use crate::systematic_constants::num_pi_symbols;
 use crate::systematic_constants::{calculate_p1, systematic_index};
+use crate::util::int_div_ceil;
 use crate::ObjectTransmissionInformation;
 #[cfg(feature = "serde_support")]
 use serde::{Deserialize, Serialize};
@@ -61,7 +68,8 @@ pub fn calculate_block_offsets(
     data: &[u8],
     config: &ObjectTransmissionInformation,
 ) -> Vec<(usize, usize)> {
-    let kt = (config.transfer_length() as f64 / config.symbol_size() as f64).ceil() as u32;
+    let kt = int_div_ceil(config.transfer_length(), config.symbol_size() as u64);
+
     let (kl, ks, zl, zs) = partition(kt, config.source_blocks());
 
     let mut data_index = 0;
@@ -210,7 +218,7 @@ impl SourceBlockEncoder {
             // Divide the block into sub-blocks and then concatenate the sub-symbols into symbols
             // See second to last paragraph in section 4.4.1.2.
             let mut offset = 0;
-            for sub_block in 0..(nl + ns) as u32 {
+            for sub_block in 0..(nl + ns) {
                 let bytes = if sub_block < nl {
                     tl as usize * config.symbol_alignment() as usize
                 } else {
@@ -347,7 +355,7 @@ fn create_d(
         D.push(symbol.clone());
     }
     // Extend the source block with padding. See section 5.3.2
-    for _ in 0..(extended_source_symbols as usize - source_block.len()) {
+    for _ in 0..(extended_source_symbols - source_block.len()) {
         D.push(Symbol::zero(symbol_size));
     }
     assert_eq!(D.len(), L as usize);
@@ -432,9 +440,11 @@ fn enc(
     result
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use rand::Rng;
+    use std::vec::Vec;
 
     use crate::base::intermediate_tuple;
     use crate::encoder::enc;
@@ -445,7 +455,9 @@ mod tests {
     use crate::systematic_constants::{
         calculate_p1, num_ldpc_symbols, systematic_index, MAX_SOURCE_SYMBOLS_PER_BLOCK,
     };
+    #[cfg(not(feature = "python"))]
     use crate::{Encoder, EncoderBuilder, EncodingPacket, ObjectTransmissionInformation};
+    #[cfg(not(feature = "python"))]
     use std::collections::HashSet;
 
     const SYMBOL_SIZE: usize = 4;
@@ -547,6 +559,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn test_builder() {
         let data = vec![0, 1, 2, 3];
@@ -556,6 +569,7 @@ mod tests {
         assert_eq!(builder.build(&data), encoder);
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn padding_constraint_exact() {
         let packet_size: u16 = 1024;
@@ -564,6 +578,7 @@ mod tests {
         padding_constraint(packet_size, padding_size, data_size);
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn padding_constraint_42_bytes() {
         let packet_size: u16 = 1024;
@@ -572,12 +587,13 @@ mod tests {
         padding_constraint(packet_size, padding_size, data_size);
     }
 
+    #[cfg(not(feature = "python"))]
     fn padding_constraint(packet_size: u16, padding_size: usize, data_size: usize) {
         let data = gen_test_data(data_size);
         let encoder = Encoder::with_defaults(&data, packet_size);
 
         fn accumulate_data(acc: Vec<u8>, packet: EncodingPacket) -> Vec<u8> {
-            let mut updated_acc = acc.clone();
+            let mut updated_acc = acc;
             updated_acc.extend_from_slice(packet.data());
             updated_acc
         }
@@ -592,6 +608,7 @@ mod tests {
         assert_eq!(data[..], padded_data[..data_size]);
     }
 
+    #[cfg(not(feature = "python"))]
     #[test]
     fn unique_blocks() {
         let data = gen_test_data(120);

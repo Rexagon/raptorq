@@ -11,3 +11,8 @@ Cargo.lock
 **/__pycache__
 
 .idea/
+/pkg
+
+# IntelliJ
+.idea/
+**/*.iml

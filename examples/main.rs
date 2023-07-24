@@ -1,7 +1,13 @@
+#[cfg(not(feature = "python"))]
 use rand::seq::SliceRandom;
+
+#[cfg(not(feature = "python"))]
 use rand::Rng;
+
+#[cfg(not(feature = "python"))]
 use everscale_raptorq::{Decoder, Encoder, EncodingPacket};
 
+#[cfg(not(feature = "python"))]
 fn main() {
     // Generate some random data to send
     let mut data: Vec<u8> = vec![0; 10_000];
@@ -35,11 +41,16 @@ fn main() {
     let mut result = None;
     while !packets.is_empty() {
         result = decoder.decode(EncodingPacket::deserialize(&packets.pop().unwrap()));
-        if result != None {
+        if result.is_some() {
             break;
         }
     }
 
     // Check that even though some of the data was lost we are able to reconstruct the original message
     assert_eq!(result.unwrap(), data);
+}
+
+#[cfg(feature = "python")]
+fn main() {
+    panic!("This is not indented to compile for `python` feature.");
 }

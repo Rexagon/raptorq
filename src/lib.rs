@@ -1,4 +1,16 @@
 #![allow(clippy::needless_return, clippy::unreadable_literal)]
+#![no_std]
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+extern crate core;
+
+#[cfg(feature = "std")]
+#[macro_use]
+extern crate std;
 
 mod arraymap;
 mod base;
