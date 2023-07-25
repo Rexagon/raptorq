@@ -187,6 +187,10 @@ impl SourceBlockEncodingPlan {
             source_symbol_count: symbol_count,
         }
     }
+
+    pub fn source_symbol_count(&self) -> u16 {
+        self.source_symbol_count
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -194,6 +198,7 @@ impl SourceBlockEncodingPlan {
 pub struct SourceBlockEncoder {
     source_block_id: u8,
     source_symbols: Vec<Symbol>,
+    source_symbols_len: u32,
     intermediate_symbols: Vec<Symbol>,
 }
 
@@ -205,6 +210,10 @@ impl SourceBlockEncoder {
     pub fn new(source_block_id: u8, symbol_size: u16, data: &[u8]) -> SourceBlockEncoder {
         let config = ObjectTransmissionInformation::new(0, symbol_size, 0, 1, 1);
         SourceBlockEncoder::new2(source_block_id, &config, data)
+    }
+
+    pub fn source_symbols_len(&self) -> u32 {
+        self.source_symbols_len
     }
 
     fn create_symbols(config: &ObjectTransmissionInformation, data: &[u8]) -> Vec<Symbol> {
@@ -244,7 +253,7 @@ impl SourceBlockEncoder {
         config: &ObjectTransmissionInformation,
         data: &[u8],
     ) -> SourceBlockEncoder {
-        let source_symbols = SourceBlockEncoder::create_symbols(config, data);
+        let mut source_symbols = SourceBlockEncoder::create_symbols(config, data);
 
         let (intermediate_symbols, _) = gen_intermediate_symbols(
             &source_symbols,
@@ -252,8 +261,11 @@ impl SourceBlockEncoder {
             SPARSE_MATRIX_THRESHOLD,
         );
 
+        source_symbols.reverse();
+
         SourceBlockEncoder {
             source_block_id,
+            source_symbols_len: source_symbols.len() as u32,
             source_symbols,
             intermediate_symbols: intermediate_symbols.unwrap(),
         }
@@ -280,7 +292,7 @@ impl SourceBlockEncoder {
         data: &[u8],
         plan: &SourceBlockEncodingPlan,
     ) -> SourceBlockEncoder {
-        let source_symbols = SourceBlockEncoder::create_symbols(config, data);
+        let mut source_symbols = SourceBlockEncoder::create_symbols(config, data);
         // TODO: this could be more lenient and support anything with the same extended symbol count
         assert_eq!(source_symbols.len(), plan.source_symbol_count as usize);
 
@@ -290,17 +302,27 @@ impl SourceBlockEncoder {
             &plan.operations,
         );
 
+        source_symbols.reverse();
+
         SourceBlockEncoder {
             source_block_id,
+            source_symbols_len: source_symbols.len() as u32,
             source_symbols,
             intermediate_symbols,
         }
+    }
+
+    pub fn take_source_packet(&mut self) -> Option<(u32, Symbol)> {
+        let remaining = self.source_symbols.len() as u32;
+        let symbol = self.source_symbols.pop()?;
+        Some((self.source_symbols_len - remaining, symbol))
     }
 
     pub fn source_packets(&self) -> Vec<EncodingPacket> {
         let mut esi: i32 = -1;
         self.source_symbols
             .iter()
+            .rev()
             .map(|symbol| {
                 esi += 1;
                 EncodingPacket::new(
@@ -313,7 +335,7 @@ impl SourceBlockEncoder {
 
     // See section 5.3.4
     pub fn repair_packets(&self, start_repair_symbol_id: u32, packets: u32) -> Vec<EncodingPacket> {
-        let source_symbols = self.source_symbols.len() as u32;
+        let source_symbols = self.source_symbols_len;
         let start_encoding_symbol_id =
             start_repair_symbol_id + extended_source_block_symbols(source_symbols) - source_symbols;
         let mut result = vec![];
@@ -326,7 +348,7 @@ impl SourceBlockEncoder {
             result.push(EncodingPacket::new(
                 PayloadId::new(self.source_block_id, start_repair_symbol_id + i),
                 enc(
-                    self.source_symbols.len() as u32,
+                    self.source_symbols_len,
                     &self.intermediate_symbols,
                     tuple,
                 )
@@ -334,6 +356,29 @@ impl SourceBlockEncoder {
             ));
         }
         result
+    }
+
+    // See section 5.3.4
+    pub fn repair_packet(&self, start_repair_symbol_id: u32) -> EncodingPacket {
+        let source_symbols = self.source_symbols_len;
+        let start_encoding_symbol_id =
+            start_repair_symbol_id + extended_source_block_symbols(source_symbols) - source_symbols;
+
+        let lt_symbols = num_lt_symbols(source_symbols);
+        let pi_symbols = num_pi_symbols(source_symbols);
+        let sys_index = systematic_index(source_symbols);
+        let p1 = calculate_p1(source_symbols, pi_symbols);
+
+        let tuple = intermediate_tuple(start_encoding_symbol_id, lt_symbols, sys_index, p1);
+        EncodingPacket::new(
+            PayloadId::new(self.source_block_id, start_repair_symbol_id),
+            enc(
+                self.source_symbols_len,
+                &self.intermediate_symbols,
+                tuple,
+            )
+            .into_bytes(),
+        )
     }
 }
 
